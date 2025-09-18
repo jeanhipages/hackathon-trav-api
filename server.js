@@ -226,14 +226,142 @@ app.post('/schedule/add', (req, res) => {
   });
 });
 
+// Helper function to round time to nearest quarter hour
+function roundToQuarterHour(date) {
+  const minutes = date.getMinutes();
+  const roundedMinutes = Math.ceil(minutes / 15) * 15;
+  const newDate = new Date(date);
+  newDate.setMinutes(roundedMinutes);
+  newDate.setSeconds(0);
+  newDate.setMilliseconds(0);
+
+  if (roundedMinutes === 60) {
+    newDate.setMinutes(0);
+    newDate.setHours(newDate.getHours() + 1);
+  }
+
+  return newDate;
+}
+
+// Helper function to parse date without timezone conversion
+function parseDate(dateString) {
+  if (!dateString) return null;
+  // Handle ISO strings by extracting just the date part or parsing carefully
+  if (dateString.includes('T')) {
+    const datePart = dateString.split('T')[0];
+    const [year, month, day] = datePart.split('-').map(Number);
+    return new Date(year, month - 1, day); // month is 0-indexed
+  }
+  // Handle YYYY-MM-DD format
+  const [year, month, day] = dateString.split('-').map(Number);
+  return new Date(year, month - 1, day); // month is 0-indexed
+}
+
+// Helper function to schedule jobs with optimized timing
+function scheduleOptimizedJobs(optimizedJobs, distanceMatrix, destinations, routingDate) {
+  const scheduledJobs = [...optimizedJobs];
+
+  // Use provided routing date or get base date from first job or use today
+  let baseDate = new Date();
+  if (routingDate) {
+    // Parse the yyyy-mm-dd format without timezone conversion
+    baseDate = parseDate(routingDate);
+    console.log(`Using provided routing date: ${routingDate} -> ${baseDate.toDateString()}`);
+  } else if (optimizedJobs.length > 0 && optimizedJobs[0].startDate) {
+    // Parse the existing date without timezone conversion
+    baseDate = parseDate(optimizedJobs[0].startDate);
+    console.log(`Using date from first job: ${optimizedJobs[0].startDate} -> ${baseDate.toDateString()}`);
+  } else {
+    console.log(`Using today's date: ${baseDate.toDateString()}`);
+  }
+
+  // Set start time between 7-9am (randomly pick 7:30am for consistency)
+  let currentTime = new Date(baseDate);
+  currentTime.setHours(7, 30, 0, 0);
+
+  console.log(`Starting schedule at: ${currentTime.toLocaleString()}`);
+
+  for (let i = 0; i < scheduledJobs.length; i++) {
+    const job = scheduledJobs[i];
+
+    // Get job duration in minutes
+    const jobDurationMinutes = (job.duration.hours || 0) * 60 + (job.duration.minutes || 0);
+    if (jobDurationMinutes === 0) {
+      // Default to 60 minutes if no duration specified
+      job.duration = { days: 0, hours: 1, minutes: 0 };
+    }
+
+    // Round start time to quarter hour
+    const startTime = roundToQuarterHour(currentTime);
+    const endTime = new Date(startTime.getTime() + ((job.duration.hours || 0) * 60 + (job.duration.minutes || 0)) * 60000);
+
+    // Update job times using timezone-agnostic ISO format
+    // Create ISO string in local time to avoid timezone shifts
+    const formatDateLocal = (date) => {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      const hours = String(date.getHours()).padStart(2, '0');
+      const minutes = String(date.getMinutes()).padStart(2, '0');
+      const seconds = String(date.getSeconds()).padStart(2, '0');
+      return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}.000Z`;
+    };
+
+    job.startDate = formatDateLocal(startTime);
+    job.endDate = formatDateLocal(endTime);
+
+    console.log(`Scheduled ${job.title}: ${startTime.toLocaleTimeString()} - ${endTime.toLocaleTimeString()}`);
+
+    // Calculate travel time to next job
+    if (i < scheduledJobs.length - 1) {
+      // Find travel time in distance matrix
+      const currentJobIndex = destinations.findIndex(d => d.jobId === job.id);
+      const nextJob = scheduledJobs[i + 1];
+      const nextJobIndex = destinations.findIndex(d => d.jobId === nextJob.id);
+
+      let travelMinutes = 15; // Default buffer
+
+      if (currentJobIndex !== -1 && nextJobIndex !== -1) {
+        // Add 1 to account for start location in matrix
+        const matrixRowIndex = currentJobIndex + 1;
+        const matrixElement = distanceMatrix.rows[matrixRowIndex]?.elements[nextJobIndex];
+
+        if (matrixElement && matrixElement.duration) {
+          travelMinutes = Math.ceil(matrixElement.duration.value / 60); // Convert seconds to minutes
+          job.travelTimeToNext = matrixElement.duration.text;
+          console.log(`Travel from ${job.title} to ${nextJob.title}: ${matrixElement.duration.text} (${travelMinutes} min)`);
+        }
+      }
+
+      // Add buffer time (15-30 minutes)
+      const bufferMinutes = Math.floor(Math.random() * 16) + 15; // Random between 15-30
+      const totalTravelMinutes = travelMinutes + bufferMinutes;
+
+      console.log(`Total travel + buffer: ${totalTravelMinutes} minutes (${travelMinutes} travel + ${bufferMinutes} buffer)`);
+
+      // Set next job start time
+      currentTime = new Date(endTime.getTime() + totalTravelMinutes * 60000);
+    }
+  }
+
+  return scheduledJobs;
+}
+
 // Route optimization endpoint
 app.post('/optimize-route', async (req, res) => {
   try {
-    const { jobs, startLocation } = req.body;
+    const { jobs, startLocation, routingDate } = req.body;
 
     if (!jobs || !Array.isArray(jobs) || jobs.length === 0) {
       return res.status(400).json({
         error: 'Jobs array is required and must contain at least one job'
+      });
+    }
+
+    // Validate routing date format if provided
+    if (routingDate && !routingDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      return res.status(400).json({
+        error: 'routingDate must be in YYYY-MM-DD format'
       });
     }
 
@@ -341,9 +469,29 @@ Respond in JSON format:
       };
     });
 
+    console.log('=== ROUTE OPTIMIZATION DEBUG ===');
+    console.log('Original jobs count:', jobs.length);
+    console.log('AI recommended route:', aiRecommendation.optimizedRoute);
+    console.log('Optimized jobs route:', optimizedJobsRoute.map(j => ({ id: j.id, title: j.title, routeOrder: j.routeOrder })));
+
+    // Schedule jobs with updated start/end times
+    const scheduledJobs = scheduleOptimizedJobs(optimizedJobsRoute, matrix, destinations, routingDate);
+
+    console.log('=== SCHEDULING DEBUG ===');
+    scheduledJobs.forEach(job => {
+      console.log(`Job ${job.routeOrder}: ${job.title}`);
+      console.log(`  Start: ${new Date(job.startDate).toLocaleString()}`);
+      console.log(`  End: ${new Date(job.endDate).toLocaleString()}`);
+      console.log(`  Duration: ${job.duration.hours}h ${job.duration.minutes}m`);
+      if (job.travelTimeToNext) {
+        console.log(`  Travel to next: ${job.travelTimeToNext}`);
+      }
+      console.log('');
+    });
+
     res.json({
       originalJobs: jobs,
-      optimizedRoute: optimizedJobsRoute,
+      optimizedRoute: scheduledJobs,
       routeOptimization: aiRecommendation,
       distanceMatrix: matrix,
       timestamp: new Date().toISOString()

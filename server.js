@@ -46,11 +46,12 @@ ${schedule.map(task => {
 
 When a user wants to add a new task, you MUST have these three pieces of information before adding:
 1. TIME - A specific time (e.g., "2pm", "around midday", "10:30 AM")
-2. LOCATION - Either a specific address OR if they mention "Bunnings", use the Bunnings Carlingford location
+2. LOCATION - Any address, business name, or location (the system will automatically look it up and get coordinates)
 3. PURPOSE/DESCRIPTION - What they need to do there
 
 STRICT RULES - YOU MUST FOLLOW THESE:
-- If they say "Bunnings" without a specific address, use "Bunnings Carlingford" at the known location
+- Accept any location - addresses, business names, landmarks, etc. (the system will automatically geocode them)
+- If they say "Bunnings" without specifying which one, you can still accept it and let the system handle it
 - If any of the 3 required pieces are missing, ask for them specifically
 - Don't add a task until you have all 3 pieces of information
 - Estimate duration if not provided (30-60 minutes for shopping, etc.)
@@ -141,21 +142,13 @@ Perfect! I've added grocery shopping to your schedule at 12:30 PM. This fits wel
           const startDate = new Date(scheduleDate.getFullYear(), scheduleDate.getMonth(), scheduleDate.getDate(), hour24, minute);
           const endDate = new Date(startDate.getTime() + durationMinutes * 60000);
 
-          // Determine location - use Bunnings data if mentioned
+          // Determine location - use Bunnings data if mentioned, otherwise geocode the address
           let locationData;
           if (taskData.location.toLowerCase().includes('bunnings')) {
             locationData = bunningsLocation.location;
           } else {
-            locationData = {
-              formattedAddress: taskData.location,
-              streetAddress: taskData.location,
-              suburb: '',
-              state: '',
-              postcode: '',
-              googlePlaceId: null,
-              latitude: null,
-              longitude: null,
-            };
+            // Use Google geocoding to get proper coordinates and address details
+            locationData = await geocodeAddress(taskData.location);
           }
 
           // Create new task in the expected schema format
@@ -225,6 +218,99 @@ app.post('/schedule/add', (req, res) => {
     timestamp: new Date().toISOString()
   });
 });
+
+// Helper function to geocode an address using Google Places API
+async function geocodeAddress(address) {
+  try {
+    if (!process.env.GOOGLE_MAPS_API_KEY) {
+      console.warn('Google Maps API key not configured, using placeholder location');
+      return {
+        formattedAddress: address,
+        streetAddress: address,
+        suburb: '',
+        state: '',
+        postcode: '',
+        googlePlaceId: null,
+        latitude: null,
+        longitude: null,
+      };
+    }
+
+    // Use Google Places API for address lookup
+    const response = await googleMapsClient.geocode({
+      params: {
+        address: address,
+        key: process.env.GOOGLE_MAPS_API_KEY,
+      }
+    });
+
+    if (response.data.results && response.data.results.length > 0) {
+      const result = response.data.results[0];
+      const location = result.geometry.location;
+
+      // Extract address components
+      const addressComponents = result.address_components;
+      let streetNumber = '';
+      let route = '';
+      let suburb = '';
+      let state = '';
+      let postcode = '';
+
+      addressComponents.forEach(component => {
+        const types = component.types;
+        if (types.includes('street_number')) {
+          streetNumber = component.long_name;
+        } else if (types.includes('route')) {
+          route = component.long_name;
+        } else if (types.includes('locality') || types.includes('sublocality_level_1')) {
+          suburb = component.long_name;
+        } else if (types.includes('administrative_area_level_1')) {
+          state = component.short_name;
+        } else if (types.includes('postal_code')) {
+          postcode = component.long_name;
+        }
+      });
+
+      const streetAddress = `${streetNumber} ${route}`.trim();
+
+      return {
+        formattedAddress: result.formatted_address,
+        streetAddress: streetAddress || result.formatted_address,
+        suburb: suburb,
+        state: state,
+        postcode: postcode,
+        googlePlaceId: result.place_id,
+        latitude: location.lat,
+        longitude: location.lng,
+      };
+    } else {
+      console.warn(`No geocoding results found for address: ${address}`);
+      return {
+        formattedAddress: address,
+        streetAddress: address,
+        suburb: '',
+        state: '',
+        postcode: '',
+        googlePlaceId: null,
+        latitude: null,
+        longitude: null,
+      };
+    }
+  } catch (error) {
+    console.error('Geocoding error:', error);
+    // Return placeholder location on error
+    return {
+      formattedAddress: address,
+      streetAddress: address,
+      suburb: '',
+      state: '',
+      postcode: '',
+      googlePlaceId: null,
+      latitude: null,
+      longitude: null,
+    };
+  }
+}
 
 // Helper function to round time to nearest quarter hour
 function roundToQuarterHour(date) {

@@ -1,0 +1,44 @@
+{
+  "jobs": [
+    {
+      "id": 1,
+      "title": "Kitchen Installation Job 1",
+      "jobTitle": "Kitchen Installation Job 1",
+      "type": "Job on site",
+      "location": {
+        "formattedAddress": "123 Oak Street, Sydney NSW 2000",
+        "latitude": -33.8688,
+        "longitude": 151.2093
+      },
+      "duration": { "days": 0, "hours": 3, "minutes": 0 },
+      "jobDescription": "Install kitchen cabinets"
+    },
+    {
+      "id": 2,
+      "title": "Kitchen Installation Job 2",
+      "jobTitle": "Kitchen Installation Job 2",
+      "type": "Job on site",
+      "location": {
+        "formattedAddress": "456 Pine Avenue, Bondi NSW 2026",
+        "latitude": -33.8915,
+        "longitude": 151.2767
+      },
+      "duration": { "days": 0, "hours": 2, "minutes": 0 },
+      "jobDescription": "Install kitchen fixtures"
+    },
+    {
+      "id": 3,
+      "title": "Quote Job",
+      "jobTitle": "Quote Job",
+      "type": "Quote inspection",
+      "location": {
+        "formattedAddress": "789 Elm Road, Manly NSW 2095",
+        "latitude": -33.7969,
+        "longitude": 151.2840
+      },
+      "duration": { "days": 0, "hours": 1, "minutes": 0 },
+      "jobDescription": "Provide quote"
+    }
+  ],
+  "startFromDate": "2025-10-14"
+}

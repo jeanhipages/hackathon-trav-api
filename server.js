@@ -257,6 +257,18 @@ function parseDate(dateString) {
   return new Date(year, month - 1, day); // month is 0-indexed
 }
 
+// Helper function to add days to a date string without timezone issues
+function addDaysToDateString(dateString, daysToAdd) {
+  const [year, month, day] = dateString.split('-').map(Number);
+  const date = new Date(year, month - 1, day + daysToAdd);
+
+  const newYear = date.getFullYear();
+  const newMonth = String(date.getMonth() + 1).padStart(2, '0');
+  const newDay = String(date.getDate()).padStart(2, '0');
+
+  return `${newYear}-${newMonth}-${newDay}`;
+}
+
 // Helper function to schedule jobs with optimized timing
 function scheduleOptimizedJobs(optimizedJobs, distanceMatrix, destinations, routingDate) {
   const scheduledJobs = [...optimizedJobs];
@@ -507,9 +519,324 @@ Respond in JSON format:
   }
 });
 
+// Helper function to calculate distance between two points using Haversine formula
+function calculateDistance(lat1, lng1, lat2, lng2) {
+  const R = 6371; // Earth's radius in kilometers
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLng/2) * Math.sin(dLng/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return R * c;
+}
+
+// Helper function to distribute jobs across multiple days using heuristics
+function distributeJobsAcrossDays(jobs, maxJobsPerDay = 7) {
+  if (jobs.length <= maxJobsPerDay) {
+    return [jobs]; // All jobs fit in one day
+  }
+
+  // Extract locations for clustering analysis
+  const jobsWithDistance = jobs.map(job => ({
+    ...job,
+    lat: job.location.latitude,
+    lng: job.location.longitude,
+    totalDuration: (job.duration.hours || 0) * 60 + (job.duration.minutes || 0)
+  }));
+
+  // Sort by priority: urgent jobs first, then by job type, then by duration
+  const prioritizedJobs = jobsWithDistance.sort((a, b) => {
+    // Priority 1: Job type priority (Job on site > Quote inspection > Task)
+    const typePriority = { 'Job on site': 3, 'Quote inspection': 2, 'Task': 1 };
+    const aPriority = typePriority[a.type] || 1;
+    const bPriority = typePriority[b.type] || 1;
+
+    if (aPriority !== bPriority) return bPriority - aPriority;
+
+    // Priority 2: Longer duration jobs first (easier to balance)
+    return b.totalDuration - a.totalDuration;
+  });
+
+  const days = [];
+  let currentDay = [];
+  let currentDayDuration = 0;
+  const maxDayDuration = 8 * 60; // 8 hours max per day
+
+  // Distribute jobs using a greedy approach with geographic clustering
+  for (const job of prioritizedJobs) {
+    const jobDuration = job.totalDuration || 60; // Default 1 hour
+
+    // Check if job fits in current day
+    if (currentDay.length < maxJobsPerDay &&
+        currentDayDuration + jobDuration <= maxDayDuration) {
+
+      // If current day is empty, add job
+      if (currentDay.length === 0) {
+        currentDay.push(job);
+        currentDayDuration += jobDuration;
+        continue;
+      }
+
+      // Calculate average distance to jobs in current day
+      const avgDistanceToCurrentDay = currentDay.reduce((sum, dayJob) =>
+        sum + calculateDistance(job.lat, job.lng, dayJob.lat, dayJob.lng), 0
+      ) / currentDay.length;
+
+      // If job is reasonably close to current day's jobs (within 15km average), add it
+      if (avgDistanceToCurrentDay <= 15) {
+        currentDay.push(job);
+        currentDayDuration += jobDuration;
+        continue;
+      }
+    }
+
+    // Start a new day
+    if (currentDay.length > 0) {
+      days.push(currentDay);
+    }
+    currentDay = [job];
+    currentDayDuration = jobDuration;
+  }
+
+  // Add the last day if it has jobs
+  if (currentDay.length > 0) {
+    days.push(currentDay);
+  }
+
+  // Post-processing: Balance days by moving jobs if beneficial
+  for (let i = 0; i < days.length - 1; i++) {
+    const currentDayJobs = days[i];
+    const nextDayJobs = days[i + 1];
+
+    // If current day is overloaded and next day has capacity
+    if (currentDayJobs.length > maxJobsPerDay * 0.8 &&
+        nextDayJobs.length < maxJobsPerDay * 0.6) {
+
+      // Find the best job to move (furthest from current day's cluster)
+      let jobToMove = null;
+      let maxDistance = 0;
+
+      for (const job of currentDayJobs) {
+        const avgDistance = currentDayJobs
+          .filter(j => j.id !== job.id)
+          .reduce((sum, j) => sum + calculateDistance(job.lat, job.lng, j.lat, j.lng), 0) /
+          (currentDayJobs.length - 1);
+
+        if (avgDistance > maxDistance) {
+          maxDistance = avgDistance;
+          jobToMove = job;
+        }
+      }
+
+      // Move the job if it's significantly far from the cluster
+      if (jobToMove && maxDistance > 10) {
+        days[i] = currentDayJobs.filter(j => j.id !== jobToMove.id);
+        days[i + 1].unshift(jobToMove);
+      }
+    }
+  }
+
+  return days;
+}
+
+// Multi-day route optimization endpoint
+app.post('/optimize-multi-day-route', async (req, res) => {
+  try {
+    const { jobs, startLocation, startFromDate } = req.body;
+
+    if (!jobs || !Array.isArray(jobs) || jobs.length === 0) {
+      return res.status(400).json({
+        error: 'Jobs array is required and must contain at least one job'
+      });
+    }
+
+    if (jobs.length > 20) {
+      return res.status(400).json({
+        error: 'Maximum 20 jobs supported for multi-day optimization'
+      });
+    }
+
+    if (!startFromDate || !startFromDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      return res.status(400).json({
+        error: 'startFromDate is required and must be in YYYY-MM-DD format'
+      });
+    }
+
+    if (!process.env.GOOGLE_MAPS_API_KEY) {
+      return res.status(500).json({
+        error: 'Google Maps API key is not configured'
+      });
+    }
+
+    console.log(`=== MULTI-DAY OPTIMIZATION START ===`);
+    console.log(`Total jobs: ${jobs.length}`);
+    console.log(`Start date: ${startFromDate}`);
+
+    // Step 1: Distribute jobs across days
+    const jobsByDay = distributeJobsAcrossDays(jobs, 7); // Max 7 jobs per day
+
+    console.log(`Jobs distributed across ${jobsByDay.length} days:`);
+    jobsByDay.forEach((dayJobs, index) => {
+      console.log(`Day ${index + 1}: ${dayJobs.length} jobs - ${dayJobs.map(j => j.title).join(', ')}`);
+    });
+
+    // Step 2: Optimize route for each day
+    const optimizedDays = [];
+
+    for (let dayIndex = 0; dayIndex < jobsByDay.length; dayIndex++) {
+      const dayJobs = jobsByDay[dayIndex];
+      const routingDate = addDaysToDateString(startFromDate, dayIndex);
+
+      console.log(`\n--- Optimizing Day ${dayIndex + 1} (${routingDate}) ---`);
+
+      // Reuse the existing single-day optimization logic
+      const destinations = dayJobs.map(job => {
+        if (!job.location || !job.location.latitude || !job.location.longitude) {
+          throw new Error(`Job "${job.title}" is missing location coordinates`);
+        }
+        return {
+          lat: job.location.latitude,
+          lng: job.location.longitude,
+          jobId: job.id,
+          title: job.title,
+          address: job.location.formattedAddress
+        };
+      });
+
+      const origin = startLocation || {
+        lat: destinations[0].lat,
+        lng: destinations[0].lng
+      };
+
+      // Get distance matrix for this day's jobs
+      const distanceMatrixResponse = await googleMapsClient.distancematrix({
+        params: {
+          origins: [origin, ...destinations.map(d => ({ lat: d.lat, lng: d.lng }))],
+          destinations: destinations.map(d => ({ lat: d.lat, lng: d.lng })),
+          mode: 'driving',
+          units: 'metric',
+          departure_time: 'now',
+          traffic_model: 'best_guess',
+          key: process.env.GOOGLE_MAPS_API_KEY,
+        }
+      });
+
+      const matrix = distanceMatrixResponse.data;
+
+      // Create AI prompt for this day's route optimization
+      const locationsInfo = destinations.map((dest, index) =>
+        `${index + 1}. ${dest.title} at ${dest.address}`
+      ).join('\n');
+
+      const matrixInfo = matrix.rows.map((row, fromIndex) => {
+        const fromLabel = fromIndex === 0 ? 'Start' : destinations[fromIndex - 1].title;
+        return row.elements.map((element, toIndex) => {
+          const toLabel = destinations[toIndex].title;
+          const duration = element.duration ? element.duration.text : 'N/A';
+          const distance = element.distance ? element.distance.text : 'N/A';
+          return `${fromLabel} → ${toLabel}: ${duration} (${distance})`;
+        }).join('\n');
+      }).join('\n\n');
+
+      const aiPrompt = `You are a route optimization expert. Given the following job locations and travel times for Day ${dayIndex + 1}, determine the most efficient route to visit all locations to minimize total travel time.
+
+Jobs to visit on Day ${dayIndex + 1}:
+${locationsInfo}
+
+Travel times and distances:
+${matrixInfo}
+
+Please analyze the travel times and provide:
+1. The optimal route order (list of job numbers)
+2. Total estimated travel time
+3. Brief explanation of why this route is optimal
+
+Respond in JSON format:
+{
+  "optimizedRoute": [job numbers in optimal order],
+  "totalTravelTime": "estimated total travel time",
+  "explanation": "brief explanation of optimization strategy"
+}`;
+
+      // Get AI recommendation for this day
+      const completion = await openai.chat.completions.create({
+        model: 'gpt-3.5-turbo',
+        messages: [
+          { role: 'system', content: 'You are a route optimization expert. Always respond with valid JSON.' },
+          { role: 'user', content: aiPrompt }
+        ],
+        max_tokens: 500,
+        temperature: 0.3
+      });
+
+      let aiRecommendation;
+      try {
+        aiRecommendation = JSON.parse(completion.choices[0].message.content);
+      } catch (parseError) {
+        console.error('Failed to parse AI response:', completion.choices[0].message.content);
+        throw new Error(`Invalid AI response format for Day ${dayIndex + 1}`);
+      }
+
+      // Create detailed route with job information
+      const optimizedJobsRoute = aiRecommendation.optimizedRoute.map(jobIndex => {
+        const job = dayJobs.find(j => j.id === destinations[jobIndex - 1].jobId);
+        return {
+          ...job,
+          routeOrder: aiRecommendation.optimizedRoute.indexOf(jobIndex) + 1
+        };
+      });
+
+      // Schedule jobs with updated start/end times
+      const scheduledJobs = scheduleOptimizedJobs(optimizedJobsRoute, matrix, destinations, routingDate);
+
+      optimizedDays.push({
+        date: routingDate,
+        dayNumber: dayIndex + 1,
+        jobs: scheduledJobs,
+        routeOptimization: aiRecommendation,
+        totalJobs: scheduledJobs.length,
+        estimatedStartTime: scheduledJobs[0]?.startDate,
+        estimatedEndTime: scheduledJobs[scheduledJobs.length - 1]?.endDate
+      });
+
+      console.log(`Day ${dayIndex + 1} optimized: ${scheduledJobs.length} jobs, route: ${aiRecommendation.optimizedRoute.join(' → ')}`);
+    }
+
+    // Calculate summary statistics
+    const totalJobs = optimizedDays.reduce((sum, day) => sum + day.totalJobs, 0);
+    const totalDays = optimizedDays.length;
+
+    console.log(`\n=== MULTI-DAY OPTIMIZATION COMPLETE ===`);
+    console.log(`Total jobs scheduled: ${totalJobs} across ${totalDays} days`);
+
+    res.json({
+      originalJobs: jobs,
+      optimizedSchedule: optimizedDays,
+      summary: {
+        totalJobs,
+        totalDays,
+        startDate: startFromDate,
+        endDate: optimizedDays[optimizedDays.length - 1]?.date,
+        averageJobsPerDay: Math.round(totalJobs / totalDays * 10) / 10
+      },
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error('Multi-day route optimization error:', error);
+    res.status(500).json({
+      error: 'Failed to optimize multi-day route',
+      details: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
   console.log(`Chat endpoint: http://localhost:${PORT}/chat`);
   console.log(`Schedule endpoint: http://localhost:${PORT}/schedule`);
   console.log(`Route optimization endpoint: http://localhost:${PORT}/optimize-route`);
+  console.log(`Multi-day route optimization endpoint: http://localhost:${PORT}/optimize-multi-day-route`);
 });

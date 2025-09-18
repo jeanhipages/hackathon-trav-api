@@ -1,0 +1,165 @@
+{
+  "jobs": [
+    {
+      "id": 1,
+      "title": "Install Kitchen Cabinets",
+      "jobTitle": "Install Kitchen Cabinets",
+      "type": "Job on site",
+      "location": {
+        "formattedAddress": "123 Oak Street, Sydney NSW 2000",
+        "latitude": -33.8688,
+        "longitude": 151.2093
+      },
+      "duration": { "days": 0, "hours": 3, "minutes": 0 },
+      "jobDescription": "Install new kitchen cabinets"
+    },
+    {
+      "id": 2,
+      "title": "Quote for Bathroom Renovation",
+      "jobTitle": "Quote for Bathroom Renovation",
+      "type": "Quote inspection",
+      "location": {
+        "formattedAddress": "456 Pine Avenue, Bondi NSW 2026",
+        "latitude": -33.8915,
+        "longitude": 151.2767
+      },
+      "duration": { "days": 0, "hours": 1, "minutes": 0 },
+      "jobDescription": "Provide quote for bathroom renovation"
+    },
+    {
+      "id": 3,
+      "title": "Fix Leaky Faucet",
+      "jobTitle": "Fix Leaky Faucet",
+      "type": "Job on site",
+      "location": {
+        "formattedAddress": "789 Elm Road, Manly NSW 2095",
+        "latitude": -33.7969,
+        "longitude": 151.2840
+      },
+      "duration": { "days": 0, "hours": 2, "minutes": 0 },
+      "jobDescription": "Repair leaking kitchen faucet"
+    },
+    {
+      "id": 4,
+      "title": "Tile Installation Quote",
+      "jobTitle": "Tile Installation Quote",
+      "type": "Quote inspection",
+      "location": {
+        "formattedAddress": "321 Birch Street, Parramatta NSW 2150",
+        "latitude": -33.8150,
+        "longitude": 151.0000
+      },
+      "duration": { "days": 0, "hours": 1, "minutes": 30 },
+      "jobDescription": "Quote for bathroom tile installation"
+    },
+    {
+      "id": 5,
+      "title": "Deck Repair",
+      "jobTitle": "Deck Repair",
+      "type": "Job on site",
+      "location": {
+        "formattedAddress": "654 Cedar Lane, Chatswood NSW 2067",
+        "latitude": -33.7969,
+        "longitude": 151.1830
+      },
+      "duration": { "days": 0, "hours": 4, "minutes": 0 },
+      "jobDescription": "Repair wooden deck boards"
+    },
+    {
+      "id": 6,
+      "title": "Paint Estimate",
+      "jobTitle": "Paint Estimate",
+      "type": "Quote inspection",
+      "location": {
+        "formattedAddress": "987 Maple Court, Hornsby NSW 2077",
+        "latitude": -33.7042,
+        "longitude": 151.0993
+      },
+      "duration": { "days": 0, "hours": 1, "minutes": 0 },
+      "jobDescription": "Estimate painting costs for living room"
+    },
+    {
+      "id": 7,
+      "title": "Plumbing Repair",
+      "jobTitle": "Plumbing Repair",
+      "type": "Job on site",
+      "location": {
+        "formattedAddress": "147 Willow Drive, Penrith NSW 2750",
+        "latitude": -33.7506,
+        "longitude": 150.6940
+      },
+      "duration": { "days": 0, "hours": 2, "minutes": 30 },
+      "jobDescription": "Fix blocked drain in bathroom"
+    },
+    {
+      "id": 8,
+      "title": "Electrical Safety Check",
+      "jobTitle": "Electrical Safety Check",
+      "type": "Task",
+      "location": {
+        "formattedAddress": "258 Poplar Road, Blacktown NSW 2148",
+        "latitude": -33.7688,
+        "longitude": 150.9062
+      },
+      "duration": { "days": 0, "hours": 1, "minutes": 30 },
+      "jobDescription": "Safety inspection of electrical system"
+    },
+    {
+      "id": 9,
+      "title": "Garden Shed Installation",
+      "jobTitle": "Garden Shed Installation",
+      "type": "Job on site",
+      "location": {
+        "formattedAddress": "369 Spruce Street, Liverpool NSW 2170",
+        "latitude": -33.9213,
+        "longitude": 150.9218
+      },
+      "duration": { "days": 0, "hours": 5, "minutes": 0 },
+      "jobDescription": "Install prefab garden shed"
+    },
+    {
+      "id": 10,
+      "title": "Window Replacement Quote",
+      "jobTitle": "Window Replacement Quote",
+      "type": "Quote inspection",
+      "location": {
+        "formattedAddress": "741 Ash Boulevard, Campbelltown NSW 2560",
+        "latitude": -34.0639,
+        "longitude": 150.8143
+      },
+      "duration": { "days": 0, "hours": 1, "minutes": 15 },
+      "jobDescription": "Quote for double-glazed window installation"
+    },
+    {
+      "id": 11,
+      "title": "Roof Repair",
+      "jobTitle": "Roof Repair",
+      "type": "Job on site",
+      "location": {
+        "formattedAddress": "852 Redwood Avenue, Sutherland NSW 2232",
+        "latitude": -34.0311,
+        "longitude": 151.0570
+      },
+      "duration": { "days": 0, "hours": 6, "minutes": 0 },
+      "jobDescription": "Repair storm damage to roof tiles"
+    },
+    {
+      "id": 12,
+      "title": "HVAC Maintenance",
+      "jobTitle": "HVAC Maintenance",
+      "type": "Task",
+      "location": {
+        "formattedAddress": "963 Hickory Place, Miranda NSW 2228",
+        "latitude": -34.0354,
+        "longitude": 151.1003
+      },
+      "duration": { "days": 0, "hours": 2, "minutes": 0 },
+      "jobDescription": "Annual HVAC system maintenance"
+    }
+  ],
+  "startFromDate": "2025-09-22",
+  "startLocation": {
+    "lat": -33.8688,
+    "lng": 151.2093
+  }
+}

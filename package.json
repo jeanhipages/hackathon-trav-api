@@ -8,6 +8,7 @@
     "dev": "nodemon server.js"
   },
   "dependencies": {
+    "@googlemaps/google-maps-services-js": "^3.4.2",
     "express": "^4.18.2",
     "openai": "^5.20.3"
   },

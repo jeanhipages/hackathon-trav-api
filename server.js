@@ -1,5 +1,6 @@
 const express = require('express');
 const OpenAI = require('openai');
+const { Client } = require('@googlemaps/google-maps-services-js');
 const { bunningsLocation } = require('./data.js');
 
 const app = express();
@@ -9,6 +10,9 @@ const PORT = process.env.PORT || 3000;
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
+
+// Initialize Google Maps client
+const googleMapsClient = new Client({});
 
 app.use(express.json());
 
@@ -222,8 +226,142 @@ app.post('/schedule/add', (req, res) => {
   });
 });
 
+// Route optimization endpoint
+app.post('/optimize-route', async (req, res) => {
+  try {
+    const { jobs, startLocation } = req.body;
+
+    if (!jobs || !Array.isArray(jobs) || jobs.length === 0) {
+      return res.status(400).json({
+        error: 'Jobs array is required and must contain at least one job'
+      });
+    }
+
+    if (!process.env.GOOGLE_MAPS_API_KEY) {
+      return res.status(500).json({
+        error: 'Google Maps API key is not configured'
+      });
+    }
+
+    // Extract locations from jobs
+    const destinations = jobs.map(job => {
+      if (!job.location || !job.location.latitude || !job.location.longitude) {
+        throw new Error(`Job "${job.title}" is missing location coordinates`);
+      }
+      return {
+        lat: job.location.latitude,
+        lng: job.location.longitude,
+        jobId: job.id,
+        title: job.title,
+        address: job.location.formattedAddress
+      };
+    });
+
+    // Use start location if provided, otherwise use first job location
+    const origin = startLocation || {
+      lat: destinations[0].lat,
+      lng: destinations[0].lng
+    };
+
+    // Get distance matrix to calculate travel times between all points
+    const distanceMatrixResponse = await googleMapsClient.distancematrix({
+      params: {
+        origins: [origin, ...destinations.map(d => ({ lat: d.lat, lng: d.lng }))],
+        destinations: destinations.map(d => ({ lat: d.lat, lng: d.lng })),
+        mode: 'driving',
+        units: 'metric',
+        departure_time: 'now',
+        traffic_model: 'best_guess',
+        key: process.env.GOOGLE_MAPS_API_KEY,
+      }
+    });
+
+    const matrix = distanceMatrixResponse.data;
+
+    // Create AI prompt for route optimization
+    const locationsInfo = destinations.map((dest, index) =>
+      `${index + 1}. ${dest.title} at ${dest.address}`
+    ).join('\n');
+
+    const matrixInfo = matrix.rows.map((row, fromIndex) => {
+      const fromLabel = fromIndex === 0 ? 'Start' : destinations[fromIndex - 1].title;
+      return row.elements.map((element, toIndex) => {
+        const toLabel = destinations[toIndex].title;
+        const duration = element.duration ? element.duration.text : 'N/A';
+        const distance = element.distance ? element.distance.text : 'N/A';
+        return `${fromLabel} → ${toLabel}: ${duration} (${distance})`;
+      }).join('\n');
+    }).join('\n\n');
+
+    const aiPrompt = `You are a route optimization expert. Given the following job locations and travel times, determine the most efficient route to visit all locations to minimize total travel time.
+
+Jobs to visit:
+${locationsInfo}
+
+Travel times and distances:
+${matrixInfo}
+
+Please analyze the travel times and provide:
+1. The optimal route order (list of job numbers)
+2. Total estimated travel time
+3. Brief explanation of why this route is optimal
+
+Respond in JSON format:
+{
+  "optimizedRoute": [job numbers in optimal order],
+  "totalTravelTime": "estimated total travel time",
+  "explanation": "brief explanation of optimization strategy"
+}`;
+
+    // Get AI recommendation
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-3.5-turbo',
+      messages: [
+        { role: 'system', content: 'You are a route optimization expert. Always respond with valid JSON.' },
+        { role: 'user', content: aiPrompt }
+      ],
+      max_tokens: 500,
+      temperature: 0.3
+    });
+
+    let aiRecommendation;
+    try {
+      aiRecommendation = JSON.parse(completion.choices[0].message.content);
+    } catch (parseError) {
+      console.error('Failed to parse AI response:', completion.choices[0].message.content);
+      throw new Error('Invalid AI response format');
+    }
+
+    // Create detailed route with job information
+    const optimizedJobsRoute = aiRecommendation.optimizedRoute.map(jobIndex => {
+      const job = jobs.find(j => j.id === destinations[jobIndex - 1].jobId);
+      return {
+        ...job,
+        routeOrder: aiRecommendation.optimizedRoute.indexOf(jobIndex) + 1
+      };
+    });
+
+    res.json({
+      originalJobs: jobs,
+      optimizedRoute: optimizedJobsRoute,
+      routeOptimization: aiRecommendation,
+      distanceMatrix: matrix,
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error('Route optimization error:', error);
+    res.status(500).json({
+      error: 'Failed to optimize route',
+      details: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
   console.log(`Chat endpoint: http://localhost:${PORT}/chat`);
   console.log(`Schedule endpoint: http://localhost:${PORT}/schedule`);
+  console.log(`Route optimization endpoint: http://localhost:${PORT}/optimize-route`);
 });

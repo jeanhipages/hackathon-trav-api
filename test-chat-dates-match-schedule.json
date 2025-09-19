@@ -1,0 +1,92 @@
+[
+  {
+    "id": 1,
+    "title": "Power outlet installation",
+    "jobTitle": "Power outlet installation",
+    "type": "Job on site",
+    "startDate": "2025-09-15T09:00:00.000Z",
+    "endDate": "2025-09-15T11:00:00.000Z",
+    "jobId": 101,
+    "location": {
+      "streetAddress": "45 Victoria Road",
+      "suburb": "Ryde",
+      "state": "NSW",
+      "postcode": "2112",
+      "formattedAddress": "45 Victoria Road, Ryde NSW 2112",
+      "googlePlaceId": "ChIJVV-VDaWlEmsRNKH7f_LX0Gk",
+      "latitude": -33.8141,
+      "longitude": 151.1071
+    },
+    "duration": {
+      "days": 0,
+      "hours": 2,
+      "minutes": 0
+    },
+    "customerId": 1,
+    "customerName": "Sarah Johnson",
+    "customerEmailAddress": "sarah.johnson@email.com",
+    "customerPhoneNumber": "0432638298",
+    "jobDescription": "Install 4 new power outlets in kitchen renovation",
+    "revenue": 320
+  },
+  {
+    "id": 2,
+    "title": "Ceiling fan installation",
+    "jobTitle": "Ceiling fan installation",
+    "type": "Job on site",
+    "startDate": "2025-09-15T13:00:00.000Z",
+    "endDate": "2025-09-15T15:00:00.000Z",
+    "jobId": 102,
+    "location": {
+      "streetAddress": "12 Castle Hill Road",
+      "suburb": "Castle Hill",
+      "state": "NSW",
+      "postcode": "2154",
+      "formattedAddress": "12 Castle Hill Road, Castle Hill NSW 2154",
+      "googlePlaceId": "ChIJKVzCpvmlEmsRCkRHiwkR3LU",
+      "latitude": -33.7969,
+      "longitude": 151.1364
+    },
+    "duration": {
+      "days": 0,
+      "hours": 2,
+      "minutes": 0
+    },
+    "customerId": 2,
+    "customerName": "Mike Chen",
+    "customerEmailAddress": "mike.chen@email.com",
+    "customerPhoneNumber": "0432638298",
+    "jobDescription": "Install ceiling fans in 3 bedrooms",
+    "revenue": 750
+  },
+  {
+    "id": 3,
+    "title": "Switchboard upgrade",
+    "jobTitle": "Switchboard upgrade",
+    "type": "Job on site",
+    "startDate": "2025-09-15T08:00:00.000Z",
+    "endDate": "2025-09-15T12:00:00.000Z",
+    "jobId": 103,
+    "location": {
+      "streetAddress": "78 George Street",
+      "suburb": "Sydney",
+      "state": "NSW",
+      "postcode": "2000",
+      "formattedAddress": "78 George Street, Sydney NSW 2000",
+      "googlePlaceId": "ChIJHw4s9j-uEmsRa0RDJ2DEQu8",
+      "latitude": -33.8688,
+      "longitude": 151.2093
+    },
+    "duration": {
+      "days": 0,
+      "hours": 4,
+      "minutes": 0
+    },
+    "customerId": 3,
+    "customerName": "Emma Wilson",
+    "customerEmailAddress": "emma.wilson@email.com",
+    "customerPhoneNumber": "0432638298",
+    "jobDescription": "Upgrade old switchboard to modern safety switches",
+    "revenue": 1200
+  }
+]

@@ -35,7 +35,15 @@ app.post('/chat', async (req, res) => {
     }
 
     // System prompt for the schedule management chatbot
-    const systemPrompt = `You are an intelligent schedule management assistant. The user has a daily schedule with appointments and tasks. Your job is to help them modify their schedule by adding new tasks.
+    const systemPrompt = `You are a friendly intelligent schedule management assistant who always responds in English. The user has a daily schedule with appointments and tasks. Your job is to help them modify their schedule by adding new tasks.
+
+CRITICAL: Before doing anything else, examine the user's exact message word by word to identify:
+- If "from [PLACE]" appears → LOCATION = [PLACE]
+- If "at [TIME]" appears → TIME = [TIME]
+- If "pickup", "drop-off", "materials", etc. appear → PURPOSE = [obvious activity]
+
+User message: "${message}"
+Now parsing this exact message for TIME, LOCATION, PURPOSE...
 
 Current Schedule:
 ${schedule.map(task => {
@@ -49,35 +57,71 @@ When a user wants to add a new task, you MUST have these three pieces of informa
 2. LOCATION - Any address, business name, or location (the system will automatically look it up and get coordinates)
 3. PURPOSE/DESCRIPTION - What they need to do there
 
-SMART PURPOSE INFERENCE - BE EFFICIENT FOR BUSY TRADESPEOPLE:
-- If the user mentions common activities, INFER the purpose automatically - DO NOT ASK FOR MORE DETAILS:
-  * "pick up kids from school" → purpose: "school pickup"
-  * "pick up materials from Bunnings" → purpose: "material pickup"
-  * "pick up materials from [hardware store]" → purpose: "material pickup"
-  * "drop off kids at school" → purpose: "school drop-off"
-  * "get groceries at [store]" → purpose: "grocery shopping"
+TONE AND COMMUNICATION:
+- Be casual, friendly, and supportive - you're helping busy tradies get organized
+- Never show frustration or be rude - always stay polite and helpful
+- Use language that's natural and easy to understand
+- Be encouraging and positive in your responses
+- Acknowledge their hard work and busy schedules
+
+SMART PURPOSE INFERENCE AND COMPLETE REQUEST PARSING:
+
+FIRST, PARSE THE FULL REQUEST - Look for TIME, LOCATION, and PURPOSE in every message:
+  * Time indicators: "at 2pm", "around 3", "5:30", "midday", "morning", "afternoon"
+  * Location indicators:
+    - ANY phrase with "from [place]" → LOCATION = [place]
+    - ANY phrase with "at [place]" → LOCATION = [place]
+    - ANY phrase with "to [place]" → LOCATION = [place]
+    - Business names: "Bunnings", "McDonald's", "Woolworths", "Coles", "Officeworks", "Mitre 10"
+    - School names: "Oakhill College", "St Mary's Primary", "[Name] School"
+    - Addresses: "123 Main St", "45 Victoria Road"
+    - Generic locations: "the bank", "post office", "pharmacy"
+  * Purpose indicators: activity names that make the purpose obvious
+
+OBVIOUS ACTIVITIES - PURPOSE IS CLEAR:
+  * "school pickup" → purpose: "school pickup"
+  * "school drop-off" → purpose: "school drop-off"
+  * "pick up materials" → purpose: "material pickup"
+  * "get groceries" → purpose: "grocery shopping"
+  * "get lunch" or "lunch" → purpose: "lunch break"
+  * "fuel up" → purpose: "refuel vehicle"
   * "go to the bank" → purpose: "banking"
-  * "fuel up at [station]" → purpose: "refuel vehicle"
-  * "lunch at [restaurant]" → purpose: "lunch break"
-  * "hardware store" → purpose: "hardware shopping"
+  * "site visit" or "job site" → purpose: "site inspection"
   * "post office" → purpose: "postal services"
   * "pharmacy" → purpose: "prescription/medical supplies"
-  * "site visit" or "job site" → purpose: "site inspection"
-  * ANY mention of "pick up" + store/location → purpose: "pickup from [store]"
-  * "go to [store]" → purpose: "visit [store]"
 
-CRITICAL: If the activity is obvious from context (like "pick up materials", "get lunch", "fuel up", etc.), DO NOT ask for clarification. Just use the inferred purpose and create the task immediately.
+CRITICAL PARSING EXAMPLES - FOLLOW EXACTLY:
 
-STRICT RULES - YOU MUST FOLLOW THESE:
-- Accept any location - addresses, business names, landmarks, etc. (the system will automatically geocode them)
-- INFER purpose from context when obvious - NEVER ask for clarification on common activities
-- Only ask for purpose if it's genuinely unclear what they're doing (rare cases only)
-- If any of the 3 required pieces are missing, ask for them specifically
-- Don't add a task until you have all 3 pieces of information
-- Estimate duration if not provided (30-60 minutes for shopping, etc.)
-- CRITICAL: Always use the EXACT SAME DATE as the items in the existing schedule - never use today's date
-- Make sure the time does not conflict with existing tasks
-- If there's a conflict, suggest the next available time slot
+REQUEST: "I need to pick up materials from Bunnings at 2pm"
+PARSING STEP BY STEP:
+1. Find TIME: "at 2pm" ✓
+2. Find LOCATION: "from Bunnings" = Bunnings ✓
+3. Find PURPOSE: "pick up materials" = material pickup ✓
+ALL THREE FOUND → CREATE TASK NOW!
+ADD_TASK: {"title": "Material pickup", "location": "Bunnings", "startTime": "2:00 PM", "duration": "30 minutes", "description": "material pickup", "type": "Task"}
+
+REQUEST: "school pickup at 3:15 from Oakhill College"
+PARSE: ✓ TIME: "at 3:15" ✓ LOCATION: "Oakhill College" ✓ PURPOSE: "school pickup"
+ACTION: CREATE TASK IMMEDIATELY with ADD_TASK JSON
+
+REQUEST: "I need to do a school pickup"
+PARSE: ✗ TIME: missing ✗ LOCATION: missing ✓ PURPOSE: "school pickup"
+ACTION: Ask "When and where do you need to do the school pickup?"
+
+REQUEST: "pick up materials at 2pm"
+PARSE: ✓ TIME: "at 2pm" ✗ LOCATION: missing ✓ PURPOSE: "material pickup"
+ACTION: Ask "Where do you need to pick up materials at 2pm?"
+
+IF YOU HAVE ALL THREE (TIME + LOCATION + PURPOSE), YOU MUST CREATE A TASK IMMEDIATELY.
+
+STRICT RULES:
+- Accept any location - addresses, business names, landmarks, etc.
+- NEVER ask for purpose if it's obvious from the activity mentioned
+- Ask for missing info casually - use "when and where" not "TIME and LOCATION"
+- Don't add a task until you have time, location, and purpose (inferred or explicit)
+- Estimate duration if not provided (30-60 minutes for errands, etc.)
+- Always use the EXACT SAME DATE as existing schedule items
+- Make sure times don't conflict with existing tasks
 
 MANDATORY CONSTRAINTS FOR TASK CREATION:
 - The "type" field can ONLY be one of these three values: "Task", "Quote inspection", or "Job on site"
@@ -85,13 +129,19 @@ MANDATORY CONSTRAINTS FOR TASK CREATION:
 - The start and end date fields must use the EXACT SAME DATE as the existing schedule items - NEVER use today's date
 - You must include the "type" field in your ADD_TASK response
 
-CRITICAL: When you have TIME, LOCATION, and PURPOSE, immediately respond with:
-ADD_TASK: {"title": "task title", "location": "exact location", "startTime": "HH:MM AM/PM", "duration": "XX minutes", "description": "task description", "type": "Task|Quote inspection|Job on site"}
+CRITICAL TASK CREATION RULE - MUST FOLLOW EXACTLY:
 
-Then add a confirmation message. Example:
-ADD_TASK: {"title": "Grocery shopping", "location": "Safeway on Oak Street", "startTime": "12:30 PM", "duration": "45 minutes", "description": "Pick up weekly groceries"}
+NEVER say "I've added", "I've scheduled", "Great! I've added", or any variation claiming you created a task UNLESS you include the ADD_TASK JSON response first.
 
-Perfect! I've added grocery shopping to your schedule at 12:30 PM. This fits well between your morning appointments.`;
+ONLY when you have TIME, SPECIFIC LOCATION, and PURPOSE, respond in this EXACT format:
+
+ADD_TASK: {"title": "task title", "location": "exact specific location", "startTime": "HH:MM AM/PM", "duration": "XX minutes", "description": "task description", "type": "Task|Quote inspection|Job on site"}
+
+Perfect! I've added [task] to your schedule at [time]. [friendly comment]
+
+FORBIDDEN: NEVER claim you've added anything without the ADD_TASK JSON above it.
+
+If you don't have all 3 pieces, just ask for what's missing - don't claim you've added anything!`;
 
     // Build conversation messages - convert chat format to OpenAI format
     const convertedHistory = conversationHistory.map(msg => ({
@@ -106,9 +156,9 @@ Perfect! I've added grocery shopping to your schedule at 12:30 PM. This fits wel
     ];
 
     const completion = await openai.chat.completions.create({
-      model: 'gpt-3.5-turbo',
+      model: 'gpt-4o-mini',
       messages: messages,
-      max_tokens: 300,
+      max_tokens: 800,
       temperature: 0.7
     });
 
@@ -135,10 +185,17 @@ Perfect! I've added grocery shopping to your schedule at 12:30 PM. This fits wel
           const durationMinutes = parseInt(taskData.duration) || 60;
 
           // Parse start time - handle different formats
-          // Use the same date as existing schedule items
-          let scheduleDate = new Date();
+          // Extract date from existing schedule items without timezone conversion
+          let baseYear = 2024, baseMonth = 9, baseDay = 20; // defaults
           if (schedule.length > 0) {
-            scheduleDate = new Date(schedule[0].startDate);
+            const existingDate = schedule[0].startDate;
+            // Parse ISO string manually to avoid timezone conversion
+            const match = existingDate.match(/^(\d{4})-(\d{2})-(\d{2})/);
+            if (match) {
+              baseYear = parseInt(match[1]);
+              baseMonth = parseInt(match[2]) - 1; // JS months are 0-indexed
+              baseDay = parseInt(match[3]);
+            }
           }
 
           let hour24, minute = 0;
@@ -159,8 +216,17 @@ Perfect! I've added grocery shopping to your schedule at 12:30 PM. This fits wel
             }
           }
 
-          const startDate = new Date(scheduleDate.getFullYear(), scheduleDate.getMonth(), scheduleDate.getDate(), hour24, minute);
-          const endDate = new Date(startDate.getTime() + durationMinutes * 60000);
+          // Create ISO string manually to avoid timezone issues
+          const formatTwoDigits = (num) => String(num).padStart(2, '0');
+          const startDateISO = `${baseYear}-${formatTwoDigits(baseMonth + 1)}-${formatTwoDigits(baseDay)}T${formatTwoDigits(hour24)}:${formatTwoDigits(minute)}:00.000Z`;
+
+          // Calculate end time
+          const endHour = hour24 + Math.floor(durationMinutes / 60);
+          const endMinute = minute + (durationMinutes % 60);
+          const adjustedEndHour = endHour + Math.floor(endMinute / 60);
+          const adjustedEndMinute = endMinute % 60;
+
+          const endDateISO = `${baseYear}-${formatTwoDigits(baseMonth + 1)}-${formatTwoDigits(baseDay)}T${formatTwoDigits(adjustedEndHour)}:${formatTwoDigits(adjustedEndMinute)}:00.000Z`;
 
           // Determine location - use Bunnings data if mentioned, otherwise geocode the address
           let locationData;
@@ -177,8 +243,8 @@ Perfect! I've added grocery shopping to your schedule at 12:30 PM. This fits wel
             title: taskData.title,
             jobTitle: taskData.title,
             type: taskData.type || 'Task',
-            startDate: startDate.toISOString(),
-            endDate: endDate.toISOString(),
+            startDate: startDateISO,
+            endDate: endDateISO,
             location: locationData,
             duration: {
               days: 0,
